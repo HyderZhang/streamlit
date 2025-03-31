@@ -103,7 +103,7 @@ def generate_seating_chart(file_path, seats_per_row):
     col_labels = generate_column_labels(seats_per_row)
     
     seating_chart = []
-    # assignments 用于记录每个参会者的座位分配信息，供生成说明文字使用
+    # 用于记录每个参会者的座位分配信息，供生成说明文字使用
     assignments = []
     
     # 按顺序分配座位（这里使用原始顺序，即不进行翻转）
@@ -116,7 +116,7 @@ def generate_seating_chart(file_path, seats_per_row):
             if i < len(seating_pattern):
                 seat_index = seating_pattern[i]
                 row_seats[seat_index] = person['NAME']
-                # 使用原始行号直接生成排号
+                # 使用原始行号生成排号（不翻转），这样 PERSONID 最小的在第一排
                 row_label = f"第{num_to_chinese(row + 1)}排"
                 seat_label = col_labels[seat_index]
                 assignments.append({
@@ -197,11 +197,9 @@ def write_to_excel(seating_df, explanation_text):
 # ---------------- Streamlit 界面 ----------------
 
 st.title("会议座位表生成器")
-
 st.write("上传包含 PERSONID 和 NAME 字段的 Excel 文件（例如 meetperson.xlsx）")
 
 uploaded_file = st.file_uploader("选择 Excel 文件", type=["xlsx"])
-
 seats_per_row = st.number_input("每排座位数", min_value=1, max_value=30, value=10, step=1)
 
 if uploaded_file is not None:
@@ -209,7 +207,6 @@ if uploaded_file is not None:
         try:
             seating_df, explanation_text = generate_seating_chart(uploaded_file, seats_per_row)
             excel_data = write_to_excel(seating_df, explanation_text)
-            
             st.success("生成成功！")
             st.download_button(
                 label="下载座位表 Excel 文件",
@@ -217,7 +214,6 @@ if uploaded_file is not None:
                 file_name="seatingmap.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-            
             st.write("### 座位说明")
             st.text(explanation_text)
         except Exception as e:
