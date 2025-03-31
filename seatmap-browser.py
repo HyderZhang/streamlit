@@ -86,23 +86,27 @@ def generate_column_labels(seats_per_row):
         labels.append(f"{num:02d}")
     return labels
 
-def generate_seating_chart(file, seats_per_row):
+def generate_seating_chart(file_path, seats_per_row):
     """
     读取 Excel 文件（人员名单包含 PERSONID 和 NAME 字段），
     按 PERSONID 升序排序后，按照每排 seats_per_row 个座位规则分配座位。
-    返回 DataFrame（seating_df）和说明文字（explanation_text）。
+    返回 DataFrame（seating_df）和说明文字（explanation_text），其中说明文字
+    按 PERSONID 升序排列，并且如果 NAME 为空或 NaN 则替换为“预留空位”。
     """
-    # 读取 Excel 文件（file 为 BytesIO 对象或文件路径）
-    df = pd.read_excel(file)
-    
-    # 按 PERSONID 升序排序（数值越低优先）
+    # 读取 Excel 文件，并按 PERSONID 升序排序
+    df = pd.read_excel(file_path)
     df_sorted = df.sort_values(by='PERSONID', ascending=True).reset_index(drop=True)
     
     total_people = len(df_sorted)
     num_rows = math.ceil(total_people / seats_per_row)
-    
     seating_pattern = compute_seating_pattern(seats_per_row)
+    col_labels = generate_column_labels(seats_per_row)
+    
     seating_chart = []
+    # assignments 用于记录每个参会者的座位分配信息，供生成说明文字使用
+    assignments = []
+    
+    # 按顺序分配座位（这里使用原始顺序，即不进行翻转）
     for row in range(num_rows):
         row_seats = ["" for _ in range(seats_per_row)]
         start_idx = row * seats_per_row
@@ -112,28 +116,38 @@ def generate_seating_chart(file, seats_per_row):
             if i < len(seating_pattern):
                 seat_index = seating_pattern[i]
                 row_seats[seat_index] = person['NAME']
+                # 使用原始行号直接生成排号
+                row_label = f"第{num_to_chinese(row + 1)}排"
+                seat_label = col_labels[seat_index]
+                assignments.append({
+                    "PERSONID": person["PERSONID"],
+                    "NAME": person["NAME"],
+                    "ROW": row_label,
+                    "SEAT": seat_label
+                })
         seating_chart.append(row_seats)
     
-    # 翻转行顺序，使第一排在最下方
+    # 构造最终表格（翻转行顺序，使得第一排在表格最下方）
     seating_chart_final = seating_chart[::-1]
     row_labels = [f"第{num_to_chinese(i+1)}排" for i in range(num_rows)]
     row_labels_final = row_labels[::-1]
     
-    col_labels = generate_column_labels(seats_per_row)
     final_table = []
     for label, row in zip(row_labels_final, seating_chart_final):
         final_table.append([label] + row)
     columns = ["排号"] + col_labels
     seating_df = pd.DataFrame(final_table, columns=columns)
     
+    # 生成说明文字：按 PERSONID 升序排列，如果 NAME 为空或 NaN，则替换为“预留空位”
+    assignments.sort(key=lambda x: x["PERSONID"])
     explanation_lines = []
-    for _, row in seating_df.iterrows():
-        current_row_label = row["排号"]
-        for col in col_labels:
-            person = row[col]
-            if pd.notna(person) and person != "":
-                explanation_lines.append(f"{person} 坐在{current_row_label}第{col}座位。")
+    for item in assignments:
+        name_val = item['NAME']
+        if pd.isna(name_val) or str(name_val).strip().lower() == 'nan' or not str(name_val).strip():
+            name_val = "预留空位"
+        explanation_lines.append(f"{name_val} 在{item['ROW']}第{item['SEAT']}座位。")
     explanation_text = "\n".join(explanation_lines)
+    
     return seating_df, explanation_text
 
 def write_to_excel(seating_df, explanation_text):
